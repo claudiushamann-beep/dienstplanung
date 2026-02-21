@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   @default("MITARBEITER")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  employee  Employee?
+}
+
+model Employee {
+  id             String       @id @default(uuid())
+  firstName      String
+  lastName       String
+  position       String
+  workFraction   Float        @default(1.0)
+  qualifications String
+  isActive       Boolean      @default(true)
+  userId         String?      @unique
+  user           User?        @relation(fields: [userId], references: [id])
+  constraints    Constraint[]
+  absences       Absence[]
+  scheduleSoll   ScheduleSoll[]
+  scheduleIst    ScheduleIst[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("employees")
+}
+
+model Constraint {
+  id           String   @id @default(uuid())
+  employeeId   String
+  type         String
+  value        String
+  description  String?
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("constraints")
+}
+
+model Absence {
+  id         String   @id @default(uuid())
+  employeeId String
+  type       String
+  startDate  DateTime
+  endDate    DateTime
+  status     String   @default("REQUESTED")
+  note       String?
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("absences")
+}
+
+model ShiftTemplate {
+  id           String   @id @default(uuid())
+  name         String
+  startTime    String
+  endTime      String
+  minStaff     Int
+  minQualified Int      @default(1)
+  color        String   @default("#3B82F6")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("shift_templates")
+}
+
+model ShiftModel {
+  id          String      @id @default(uuid())
+  name        String
+  description String?
+  config      String
+  isActive    Boolean     @default(true)
+  shifts      ShiftConfig[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("shift_models")
+}
+
+model ShiftConfig {
+  id           String     @id @default(uuid())
+  shiftModelId String
+  name         String
+  startTime    String
+  endTime      String
+  minStaff     Int
+  minQualified Int       @default(1)
+  days         String
+  color        String     @default("#3B82F6")
+  shiftModel   ShiftModel @relation(fields: [shiftModelId], references: [id], onDelete: Cascade)
+
+  @@map("shift_configs")
+}
+
+model ScheduleSoll {
+  id           String   @id @default(uuid())
+  employeeId   String
+  date         DateTime
+  shiftType    String
+  shiftModelId String?
+  note         String?
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([employeeId, date, shiftType])
+  @@map("schedule_soll")
+}
+
+model ScheduleIst {
+  id              String   @id @default(uuid())
+  employeeId      String
+  date            DateTime
+  shiftType       String
+  shiftModelId    String?
+  deviationReason String?
+  note            String?
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([employeeId, date, shiftType])
+  @@map("schedule_ist")
+}
+
+model Statistics {
+  id              String   @id @default(uuid())
+  employeeId      String
+  month           Int
+  year            Int
+  totalShifts     Int      @default(0)
+  earlyShifts     Int      @default(0)
+  lateShifts      Int      @default(0)
+  nightShifts     Int      @default(0)
+  weekendShifts   Int      @default(0)
+  holidayShifts   Int      @default(0)
+  hoursWorked     Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([employeeId, month, year])
+  @@map("statistics")
+}
+
+model AIProvider {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  type      String
+  apiKey    String?
+  baseUrl   String?
+  isActive  Boolean  @default(true)
+  isDefault Boolean  @default(false)
+  config    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("ai_providers")
+}
