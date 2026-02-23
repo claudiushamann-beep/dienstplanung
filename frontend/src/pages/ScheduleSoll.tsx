@@ -87,11 +87,13 @@ export default function ScheduleSoll() {
     );
   };
 
-  const getShiftColor = (shiftType: string) => {
-    if (shiftType.includes('Früh')) return 'bg-green-500';
-    if (shiftType.includes('Spät')) return 'bg-amber-500';
-    if (shiftType.includes('Nacht')) return 'bg-indigo-500';
-    return 'bg-gray-500';
+  const getShiftStyle = (shiftType: string): React.CSSProperties => {
+    const shift = selectedModel?.shifts.find((s) => s.name === shiftType);
+    if (shift?.color) return { backgroundColor: shift.color };
+    if (shiftType.includes('Früh')) return { backgroundColor: '#22c55e' };
+    if (shiftType.includes('Spät')) return { backgroundColor: '#f59e0b' };
+    if (shiftType.includes('Nacht')) return { backgroundColor: '#6366f1' };
+    return { backgroundColor: '#6b7280' };
   };
 
   const toggleShift = async (employeeId: string, date: Date, shiftType: string) => {
@@ -225,7 +227,8 @@ export default function ScheduleSoll() {
                         {shifts.map((s) => (
                           <div
                             key={s.id}
-                            className={`px-2 py-0.5 rounded text-white cursor-pointer ${getShiftColor(s.shiftType)}`}
+                            className="px-2 py-0.5 rounded text-white cursor-pointer"
+                            style={getShiftStyle(s.shiftType)}
                             onClick={() => toggleShift(emp.id, day, s.shiftType)}
                           >
                             {s.shiftType}
@@ -233,13 +236,14 @@ export default function ScheduleSoll() {
                         ))}
                         {shifts.length === 0 && selectedModel && (
                           <div className="flex flex-col gap-0.5">
-                            {['Früh', 'Spät', 'Nacht'].map((shift) => (
+                            {selectedModel.shifts.map((shift) => (
                               <button
-                                key={shift}
-                                onClick={() => toggleShift(emp.id, day, shift)}
+                                key={shift.id}
+                                onClick={() => toggleShift(emp.id, day, shift.name)}
                                 className="px-2 py-0.5 rounded border border-dashed border-gray-300 text-gray-400 hover:border-gray-500 hover:text-gray-600"
+                                title={shift.name}
                               >
-                                {shift.charAt(0)}
+                                {shift.name.charAt(0)}
                               </button>
                             ))}
                           </div>
@@ -254,23 +258,19 @@ export default function ScheduleSoll() {
         </table>
       </div>
 
-      <div className="bg-white rounded-lg shadow p-4">
-        <h3 className="font-medium mb-2">Legende</h3>
-        <div className="flex gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-green-500"></div>
-            <span className="text-sm">Frühdienst</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-amber-500"></div>
-            <span className="text-sm">Spätdienst</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-indigo-500"></div>
-            <span className="text-sm">Nachtdienst</span>
+      {selectedModel && (
+        <div className="bg-white rounded-lg shadow p-4">
+          <h3 className="font-medium mb-2">Legende</h3>
+          <div className="flex flex-wrap gap-4">
+            {selectedModel.shifts.map((s) => (
+              <div key={s.id} className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded" style={{ backgroundColor: s.color }}></div>
+                <span className="text-sm">{s.name}</span>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

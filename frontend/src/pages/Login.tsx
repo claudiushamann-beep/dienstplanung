@@ -51,7 +51,7 @@ export default function Login() {
               onChange={(e) => setEmail(e.target.value)}
               required
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="admin@krankenhaus.de"
+              placeholder="ihre@email.de"
             />
           </div>
 
@@ -65,7 +65,7 @@ export default function Login() {
               onChange={(e) => setPassword(e.target.value)}
               required
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="admin123"
+              placeholder="••••••••"
             />
           </div>
 
@@ -78,11 +78,6 @@ export default function Login() {
           </button>
         </form>
 
-        <div className="mt-6 text-sm text-gray-500 text-center">
-          <p className="font-medium">Test-Zugänge:</p>
-          <p>Admin: admin@krankenhaus.de / admin123</p>
-          <p>Planer: planer@krankenhaus.de / planer123</p>
-        </div>
       </div>
     </div>
   );

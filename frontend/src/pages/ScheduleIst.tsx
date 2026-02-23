@@ -55,9 +55,13 @@ export default function ScheduleIst() {
   };
 
   const handleUpdateDeviation = async (entryId: string, reason: string) => {
+    const entry = schedule.find((s) => s.id === entryId);
+    if (!entry) return;
     try {
       await schedulesApi.createIst([{
-        id: entryId,
+        employeeId: entry.employeeId,
+        date: entry.date.split('T')[0],
+        shiftType: entry.shiftType,
         deviationReason: reason || null,
       }]);
       setEditingEntry(null);

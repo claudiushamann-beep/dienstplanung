@@ -6,6 +6,8 @@ export default function StatisticsPage() {
   const [statistics, setStatistics] = useState<Statistics[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [calculating, setCalculating] = useState(false);
+  const [calcSuccess, setCalcSuccess] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -33,12 +35,17 @@ export default function StatisticsPage() {
 
   const handleCalculate = async () => {
     const [year, month] = selectedMonth.split('-').map(Number);
+    setCalculating(true);
+    setCalcSuccess(false);
     try {
       await statisticsApi.calculate(month, year);
-      fetchData();
-      alert('Statistiken berechnet!');
+      await fetchData();
+      setCalcSuccess(true);
+      setTimeout(() => setCalcSuccess(false), 3000);
     } catch (err) {
       console.error('Fehler:', err);
+    } finally {
+      setCalculating(false);
     }
   };
 
@@ -71,9 +78,12 @@ export default function StatisticsPage() {
           />
           <button
             onClick={handleCalculate}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            disabled={calculating}
+            className={`px-4 py-2 text-white rounded-md disabled:opacity-50 ${
+              calcSuccess ? 'bg-green-600' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
           >
-            Neu berechnen
+            {calculating ? 'Berechne...' : calcSuccess ? 'Berechnet!' : 'Neu berechnen'}
           </button>
         </div>
       </div>
