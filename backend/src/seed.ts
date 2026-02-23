@@ -355,7 +355,7 @@ async function main() {
   }
 
   console.log('Erstelle Ist-Dienstplan mit Abweichungen...');
-  const istEntries = scheduleEntries.slice(0, Math.floor(scheduleEntries.length * 0.8)).map(entry => ({
+  const istEntries: Array<{ employeeId: string; date: Date; shiftType: string; shiftModelId: string; deviationReason: string | null }> = scheduleEntries.slice(0, Math.floor(scheduleEntries.length * 0.8)).map(entry => ({
     ...entry,
     deviationReason: null
   }));

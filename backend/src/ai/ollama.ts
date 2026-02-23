@@ -20,7 +20,7 @@ export class OllamaProvider {
       })
     });
 
-    const data = await response.json();
+    const data = await response.json() as { response: string };
     return data.response;
   }
 

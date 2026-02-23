@@ -32,6 +32,7 @@ model Employee {
   absences       Absence[]
   scheduleSoll   ScheduleSoll[]
   scheduleIst    ScheduleIst[]
+  statistics     Statistics[]
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -152,6 +153,7 @@ model Statistics {
   weekendShifts   Int      @default(0)
   holidayShifts   Int      @default(0)
   hoursWorked     Float    @default(0)
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

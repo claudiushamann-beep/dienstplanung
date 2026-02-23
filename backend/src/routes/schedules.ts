@@ -179,16 +179,27 @@ router.post('/copy-soll-to-ist', auth, requireRole('ADMIN', 'PLANER'), async (re
       }
     });
 
-    await prisma.scheduleIst.createMany({
-      data: sollEntries.map(entry => ({
-        employeeId: entry.employeeId,
-        date: entry.date,
-        shiftType: entry.shiftType,
-        shiftModelId: entry.shiftModelId,
-        note: entry.note
-      })),
-      skipDuplicates: true
-    });
+    await prisma.$transaction(
+      sollEntries.map(entry =>
+        prisma.scheduleIst.upsert({
+          where: {
+            employeeId_date_shiftType: {
+              employeeId: entry.employeeId,
+              date: entry.date,
+              shiftType: entry.shiftType,
+            }
+          },
+          update: {},
+          create: {
+            employeeId: entry.employeeId,
+            date: entry.date,
+            shiftType: entry.shiftType,
+            shiftModelId: entry.shiftModelId,
+            note: entry.note,
+          }
+        })
+      )
+    );
 
     res.json({ message: 'Soll-Plan erfolgreich in Ist-Plan kopiert', count: sollEntries.length });
   } catch (error) {

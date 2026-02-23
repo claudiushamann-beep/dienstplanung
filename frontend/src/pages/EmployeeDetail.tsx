@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { employeesApi, constraintsApi, absencesApi } from '../services/api';
-import { Employee, Constraint, Absence, ConstraintType, AbsenceType, AbsenceStatus } from '../types';
+import { Employee, Constraint, Absence, ConstraintType, AbsenceType } from '../types';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 

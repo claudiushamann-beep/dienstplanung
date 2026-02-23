@@ -3,7 +3,7 @@ import { employeesApi, shiftModelsApi, schedulesApi, aiApi } from '../services/a
 import { Employee, ShiftModel, ScheduleEntry } from '../types';
 import { format, startOfWeek, addDays, isWeekend } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { Sparkles, Loader2, Save, Copy } from 'lucide-react';
+import { Sparkles, Loader2, Copy } from 'lucide-react';
 
 export default function ScheduleSoll() {
   const [employees, setEmployees] = useState<Employee[]>([]);
