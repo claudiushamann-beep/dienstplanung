@@ -1,14 +1,15 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/auth';
-import { 
-  LayoutDashboard, 
-  Users, 
-  Calendar, 
-  CalendarCheck, 
-  BarChart3, 
-  Settings, 
+import {
+  LayoutDashboard,
+  Users,
+  Calendar,
+  CalendarCheck,
+  BarChart3,
+  Settings,
   LogOut,
-  Clock
+  Clock,
+  Terminal
 } from 'lucide-react';
 
 export default function Layout() {
@@ -28,6 +29,7 @@ export default function Layout() {
     { to: '/plan/soll', icon: Calendar, label: 'Soll-Plan', requirePlaner: true },
     { to: '/plan/ist', icon: CalendarCheck, label: 'Ist-Plan', requirePlaner: true },
     { to: '/statistik', icon: BarChart3, label: 'Statistik' },
+    { to: '/konsole', icon: Terminal, label: 'KI-Konsole', requirePlaner: true },
     { to: '/einstellungen', icon: Settings, label: 'Einstellungen', requirePlaner: true },
   ];
 

@@ -96,4 +96,6 @@ export const aiApi = {
     api.post('/ai/explain-model', { description, providerId }),
   generateSchedule: (shiftModelId: string, startDate: string, endDate: string, providerId?: string) =>
     api.post('/ai/generate-schedule', { shiftModelId, startDate, endDate, providerId }),
+  chat: (messages: { role: 'user' | 'assistant'; content: string }[], providerId?: string) =>
+    api.post('/ai/chat', { messages, providerId }),
 };

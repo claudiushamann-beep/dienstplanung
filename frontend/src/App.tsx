@@ -10,6 +10,7 @@ import ScheduleSoll from './pages/ScheduleSoll';
 import ScheduleIst from './pages/ScheduleIst';
 import Statistics from './pages/Statistics';
 import Settings from './pages/Settings';
+import Konsole from './pages/Konsole';
 
 function PrivateRoute({ children, requirePlaner = false }: { children: React.ReactNode; requirePlaner?: boolean }) {
   const { isAuthenticated, isPlaner } = useAuthStore();
@@ -39,6 +40,7 @@ function App() {
           <Route path="plan/ist" element={<PrivateRoute requirePlaner><ScheduleIst /></PrivateRoute>} />
           <Route path="statistik" element={<PrivateRoute><Statistics /></PrivateRoute>} />
           <Route path="einstellungen" element={<PrivateRoute requirePlaner><Settings /></PrivateRoute>} />
+          <Route path="konsole" element={<PrivateRoute requirePlaner><Konsole /></PrivateRoute>} />
         </Route>
       </Routes>
     </BrowserRouter>
