@@ -41,7 +41,7 @@ router.post('/', auth, requireRole('ADMIN', 'PLANER'), async (req: AuthRequest, 
       data: {
         name,
         description,
-        config,
+        config: typeof config === 'object' ? JSON.stringify(config) : (config || '{}'),
         shifts: {
           create: shifts || []
         }
@@ -70,7 +70,7 @@ router.put('/:id', auth, requireRole('ADMIN', 'PLANER'), async (req: AuthRequest
       data: {
         name,
         description,
-        config,
+        config: config !== undefined ? (typeof config === 'object' ? JSON.stringify(config) : config) : undefined,
         isActive,
         shifts: shifts ? {
           create: shifts

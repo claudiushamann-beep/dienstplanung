@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { employeesApi, shiftModelsApi, schedulesApi, aiApi } from '../services/api';
 import { Employee, ShiftModel, ScheduleEntry } from '../types';
-import { format, startOfWeek, addDays, isWeekend } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isWeekend, addMonths, subMonths, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { Sparkles, Loader2, Save, Copy } from 'lucide-react';
+import { Sparkles, Loader2, Copy, Lock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { isHoliday, getHolidayName } from '../utils/holidays';
 
 export default function ScheduleSoll() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -12,16 +13,15 @@ export default function ScheduleSoll() {
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [aiLoading, setAiLoading] = useState(false);
-  const [startDate, setStartDate] = useState(() => {
-    const d = startOfWeek(new Date(), { weekStartsOn: 1 });
-    return format(d, 'yyyy-MM-dd');
-  });
+  const [currentMonth, setCurrentMonth] = useState(() => format(new Date(), 'yyyy-MM'));
 
-  const days = Array.from({ length: 14 }, (_, i) => addDays(new Date(startDate), i));
+  const monthStart = startOfMonth(parseISO(currentMonth + '-01'));
+  const monthEnd = endOfMonth(monthStart);
+  const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
   useEffect(() => {
     fetchData();
-  }, [startDate, selectedModelId]);
+  }, [currentMonth, selectedModelId]);
 
   const fetchData = async () => {
     try {
@@ -29,8 +29,8 @@ export default function ScheduleSoll() {
         employeesApi.getAll(),
         shiftModelsApi.getAll(),
         schedulesApi.getSoll({
-          startDate: days[0].toISOString(),
-          endDate: days[13].toISOString(),
+          startDate: monthStart.toISOString(),
+          endDate: monthEnd.toISOString(),
         }),
       ]);
       setEmployees(empRes.data.filter((e: Employee) => e.isActive));
@@ -55,10 +55,10 @@ export default function ScheduleSoll() {
     try {
       const response = await aiApi.generateSchedule(
         selectedModelId,
-        days[0].toISOString(),
-        days[13].toISOString()
+        monthStart.toISOString(),
+        monthEnd.toISOString()
       );
-      
+
       if (response.data.entries && response.data.entries.length > 0) {
         await schedulesApi.createSoll(response.data.entries);
         fetchData();
@@ -73,7 +73,7 @@ export default function ScheduleSoll() {
   const handleCopyToIst = async () => {
     if (!confirm('Soll-Plan in Ist-Plan kopieren?')) return;
     try {
-      await schedulesApi.copySollToIst(days[0].toISOString(), days[13].toISOString());
+      await schedulesApi.copySollToIst(monthStart.toISOString(), monthEnd.toISOString());
       alert('Erfolgreich kopiert!');
     } catch (err) {
       console.error('Fehler beim Kopieren:', err);
@@ -93,6 +93,8 @@ export default function ScheduleSoll() {
     if (shiftType.includes('Nacht')) return 'bg-indigo-500';
     return 'bg-gray-500';
   };
+
+  const isDayOff = (day: Date) => isWeekend(day) || isHoliday(day);
 
   const toggleShift = async (employeeId: string, date: Date, shiftType: string) => {
     const dateStr = format(date, 'yyyy-MM-dd');
@@ -117,6 +119,23 @@ export default function ScheduleSoll() {
     }
   };
 
+  const togglePin = async (e: React.MouseEvent, shift: ScheduleEntry) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await schedulesApi.createSoll([{
+        employeeId: shift.employeeId,
+        date: shift.date.split('T')[0],
+        shiftType: shift.shiftType,
+        shiftModelId: shift.shiftModelId,
+        isPinned: !shift.isPinned,
+      }]);
+      fetchData();
+    } catch (err) {
+      console.error('Fehler beim Pinnen:', err);
+    }
+  };
+
   if (loading) return <div className="text-center py-10">Laden...</div>;
 
   const activeEmployees = employees.filter((e) => e.isActive);
@@ -124,15 +143,28 @@ export default function ScheduleSoll() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-gray-900">Soll-Dienstplan</h1>
-        <div className="flex items-center gap-4">
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="px-3 py-2 border rounded-md"
-          />
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Month navigation */}
+          <div className="flex items-center gap-2 border rounded-md px-2 py-1 bg-white">
+            <button
+              onClick={() => setCurrentMonth(format(subMonths(parseISO(currentMonth + '-01'), 1), 'yyyy-MM'))}
+              className="p-1 hover:bg-gray-100 rounded"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="font-medium min-w-[130px] text-center">
+              {format(parseISO(currentMonth + '-01'), 'MMMM yyyy', { locale: de })}
+            </span>
+            <button
+              onClick={() => setCurrentMonth(format(addMonths(parseISO(currentMonth + '-01'), 1), 'yyyy-MM'))}
+              className="p-1 hover:bg-gray-100 rounded"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
           <select
             value={selectedModelId}
             onChange={(e) => setSelectedModelId(e.target.value)}
@@ -197,12 +229,13 @@ export default function ScheduleSoll() {
               {days.map((day) => (
                 <th
                   key={day.toISOString()}
-                  className={`px-2 py-3 text-center text-xs font-medium uppercase ${
-                    isWeekend(day) ? 'bg-gray-100' : ''
+                  className={`px-2 py-3 text-center text-xs font-medium uppercase min-w-[38px] ${
+                    isDayOff(day) ? 'bg-gray-100' : ''
                   }`}
+                  title={getHolidayName(day) || undefined}
                 >
                   <div>{format(day, 'EEE', { locale: de })}</div>
-                  <div className="font-normal">{format(day, 'dd.MM')}</div>
+                  <div className="font-normal">{format(day, 'dd')}</div>
                 </th>
               ))}
             </tr>
@@ -219,27 +252,32 @@ export default function ScheduleSoll() {
                   return (
                     <td
                       key={day.toISOString()}
-                      className={`px-1 py-2 text-center text-xs ${isWeekend(day) ? 'bg-gray-50' : ''}`}
+                      className={`px-1 py-2 text-center text-xs ${isDayOff(day) ? 'bg-gray-50' : ''}`}
                     >
                       <div className="flex flex-col gap-1">
                         {shifts.map((s) => (
                           <div
                             key={s.id}
-                            className={`px-2 py-0.5 rounded text-white cursor-pointer ${getShiftColor(s.shiftType)}`}
-                            onClick={() => toggleShift(emp.id, day, s.shiftType)}
+                            className={`relative px-1 py-0.5 rounded text-white cursor-pointer select-none ${getShiftColor(s.shiftType)} ${s.isPinned ? 'ring-2 ring-yellow-300' : ''}`}
+                            onClick={() => !s.isPinned && toggleShift(emp.id, day, s.shiftType)}
+                            onContextMenu={(e) => togglePin(e, s)}
+                            title={s.isPinned ? 'Festgesetzt – Rechtsklick zum Lösen' : 'Rechtsklick zum Festsetzen'}
                           >
-                            {s.shiftType}
+                            <span className="flex items-center justify-center gap-0.5">
+                              {s.isPinned && <Lock className="w-2.5 h-2.5" />}
+                              <span>{s.shiftType.charAt(0)}</span>
+                            </span>
                           </div>
                         ))}
                         {shifts.length === 0 && selectedModel && (
                           <div className="flex flex-col gap-0.5">
-                            {['Früh', 'Spät', 'Nacht'].map((shift) => (
+                            {selectedModel.shifts.map((shift) => (
                               <button
-                                key={shift}
-                                onClick={() => toggleShift(emp.id, day, shift)}
-                                className="px-2 py-0.5 rounded border border-dashed border-gray-300 text-gray-400 hover:border-gray-500 hover:text-gray-600"
+                                key={shift.id}
+                                onClick={() => toggleShift(emp.id, day, shift.name)}
+                                className="px-1 py-0.5 rounded border border-dashed border-gray-300 text-gray-400 hover:border-gray-500 hover:text-gray-600"
                               >
-                                {shift.charAt(0)}
+                                {shift.name.charAt(0)}
                               </button>
                             ))}
                           </div>
@@ -256,7 +294,7 @@ export default function ScheduleSoll() {
 
       <div className="bg-white rounded-lg shadow p-4">
         <h3 className="font-medium mb-2">Legende</h3>
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-4">
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded bg-green-500"></div>
             <span className="text-sm">Frühdienst</span>
@@ -268,6 +306,15 @@ export default function ScheduleSoll() {
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded bg-indigo-500"></div>
             <span className="text-sm">Nachtdienst</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded bg-gray-200 border"></div>
+            <span className="text-sm">Wochenende / Feiertag</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded bg-green-500 ring-2 ring-yellow-300"></div>
+            <Lock className="w-3 h-3" />
+            <span className="text-sm">Festgesetzt (Rechtsklick zum Ändern)</span>
           </div>
         </div>
       </div>

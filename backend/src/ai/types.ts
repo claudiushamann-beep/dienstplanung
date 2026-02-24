@@ -13,6 +13,9 @@ export interface GenerateScheduleParams {
   shiftModel: any;
   startDate: Date;
   endDate: Date;
+  pinnedEntries?: any[];
+  holidays?: { date: string; name: string }[];
+  rules?: { type: string; value?: any; label?: string }[];
 }
 
 export interface ExplainModelParams {

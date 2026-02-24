@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { prisma } from '../index.js';
 import { auth, AuthRequest } from '../middleware/auth.js';
+import { isGermanHoliday } from '../utils/holidays.js';
 
 const router = Router();
 
@@ -79,14 +80,16 @@ router.post('/calculate', auth, async (req: AuthRequest, res: Response) => {
         }
       });
 
+      const holidayState = process.env.HOLIDAY_STATE || 'SH';
       const weekendDays = [0, 6];
       let weekendShifts = 0;
+      let holidayShifts = 0;
 
       for (const entry of istEntries) {
-        const dayOfWeek = new Date(entry.date).getDay();
-        if (weekendDays.includes(dayOfWeek)) {
-          weekendShifts++;
-        }
+        const entryDate = new Date(entry.date);
+        const dayOfWeek = entryDate.getDay();
+        if (weekendDays.includes(dayOfWeek)) weekendShifts++;
+        if (isGermanHoliday(entryDate, holidayState)) holidayShifts++;
       }
 
       const hoursMap: Record<string, number> = {
@@ -110,10 +113,11 @@ router.post('/calculate', auth, async (req: AuthRequest, res: Response) => {
         },
         update: {
           totalShifts: istEntries.length,
-          earlyShifts: istEntries.filter(e => e.shiftType === 'FRUEH').length,
-          lateShifts: istEntries.filter(e => e.shiftType === 'SPAET').length,
-          nightShifts: istEntries.filter(e => e.shiftType === 'NACHT').length,
+          earlyShifts: istEntries.filter(e => e.shiftType.includes('Früh') || e.shiftType === 'FRUEH').length,
+          lateShifts: istEntries.filter(e => e.shiftType.includes('Spät') || e.shiftType === 'SPAET').length,
+          nightShifts: istEntries.filter(e => e.shiftType.includes('Nacht') || e.shiftType === 'NACHT').length,
           weekendShifts,
+          holidayShifts,
           hoursWorked
         },
         create: {
@@ -121,10 +125,11 @@ router.post('/calculate', auth, async (req: AuthRequest, res: Response) => {
           month,
           year,
           totalShifts: istEntries.length,
-          earlyShifts: istEntries.filter(e => e.shiftType === 'FRUEH').length,
-          lateShifts: istEntries.filter(e => e.shiftType === 'SPAET').length,
-          nightShifts: istEntries.filter(e => e.shiftType === 'NACHT').length,
+          earlyShifts: istEntries.filter(e => e.shiftType.includes('Früh') || e.shiftType === 'FRUEH').length,
+          lateShifts: istEntries.filter(e => e.shiftType.includes('Spät') || e.shiftType === 'SPAET').length,
+          nightShifts: istEntries.filter(e => e.shiftType.includes('Nacht') || e.shiftType === 'NACHT').length,
           weekendShifts,
+          holidayShifts,
           hoursWorked
         }
       });

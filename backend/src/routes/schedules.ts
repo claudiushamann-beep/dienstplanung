@@ -75,7 +75,7 @@ router.post('/soll', auth, requireRole('ADMIN', 'PLANER'), async (req: AuthReque
     const { entries } = req.body;
 
     const created = await prisma.$transaction(
-      entries.map((entry: any) => 
+      entries.map((entry: any) =>
         prisma.scheduleSoll.upsert({
           where: {
             employeeId_date_shiftType: {
@@ -86,14 +86,16 @@ router.post('/soll', auth, requireRole('ADMIN', 'PLANER'), async (req: AuthReque
           },
           update: {
             note: entry.note,
-            shiftModelId: entry.shiftModelId
+            shiftModelId: entry.shiftModelId,
+            isPinned: entry.isPinned !== undefined ? Boolean(entry.isPinned) : undefined
           },
           create: {
             employeeId: entry.employeeId,
             date: new Date(entry.date),
             shiftType: entry.shiftType,
             shiftModelId: entry.shiftModelId,
-            note: entry.note
+            note: entry.note,
+            isPinned: entry.isPinned ?? false
           }
         })
       )

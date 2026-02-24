@@ -3,6 +3,31 @@ import { shiftModelsApi, aiApi } from '../services/api';
 import { ShiftModel, ShiftConfig } from '../types';
 import { Plus, Trash2, Sparkles, Save, Loader2 } from 'lucide-react';
 
+interface Rule {
+  type: string;
+  value: number | string;
+  shiftA?: string;
+  shiftB?: string;
+  label: string;
+}
+
+const RULE_TYPES = [
+  { value: 'MAX_CONSECUTIVE_SHIFTS', label: 'Max. aufeinanderfolgende Dienste', unit: 'Dienste' },
+  { value: 'MIN_REST_DAYS', label: 'Min. Ruhetage nach langer Folge', unit: 'Tage' },
+  { value: 'MAX_SHIFTS_PER_WEEK', label: 'Max. Dienste pro Woche', unit: 'Dienste' },
+  { value: 'MAX_SHIFTS_PER_MONTH', label: 'Max. Dienste pro Monat', unit: 'Dienste' },
+  { value: 'NO_SHIFT_AFTER', label: 'Keine Schicht X nach Schicht Y', unit: '' },
+];
+
+function parseConfig(configStr: string): { notes: string; rules: Rule[] } {
+  try {
+    const parsed = JSON.parse(configStr || '{}');
+    return { notes: parsed.notes || '', rules: parsed.rules || [] };
+  } catch {
+    return { notes: '', rules: [] };
+  }
+}
+
 export default function ShiftModels() {
   const [models, setModels] = useState<ShiftModel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -15,6 +40,7 @@ export default function ShiftModels() {
     name: '',
     description: '',
     shifts: [] as Partial<ShiftConfig>[],
+    rules: [] as Rule[],
   });
 
   useEffect(() => {
@@ -38,12 +64,12 @@ export default function ShiftModels() {
     try {
       const response = await aiApi.explainModel(aiDescription);
       const result = response.data;
-      
+
       setAiResult({
         id: '',
         name: result.name || 'Neues Modell',
         description: result.description || '',
-        config: '',
+        config: '{}',
         isActive: true,
         shifts: (result.shifts || []).map((s: any) => ({
           id: '',
@@ -57,10 +83,11 @@ export default function ShiftModels() {
           color: s.color || '#3B82F6',
         })),
       });
-      
+
       setEditForm({
         name: result.name || 'Neues Modell',
         description: result.description || '',
+        rules: [],
         shifts: (result.shifts || []).map((s: any) => ({
           name: s.name,
           startTime: s.startTime,
@@ -80,25 +107,28 @@ export default function ShiftModels() {
 
   const handleSaveModel = async () => {
     try {
+      const config = JSON.stringify({ rules: editForm.rules });
       if (selectedModel?.id) {
         await shiftModelsApi.update(selectedModel.id, {
           name: editForm.name,
           description: editForm.description,
+          config,
           shifts: editForm.shifts,
         });
       } else {
         await shiftModelsApi.create({
           name: editForm.name,
           description: editForm.description,
+          config,
           shifts: editForm.shifts,
         });
       }
-      setEditForm({ name: '', description: '', shifts: [] });
+      setEditForm({ name: '', description: '', shifts: [], rules: [] });
       setSelectedModel(null);
       setAiResult(null);
       fetchModels();
-    } catch (err) {
-      console.error('Fehler beim Speichern:', err);
+    } catch (err: any) {
+      alert('Fehler beim Speichern: ' + (err.response?.data?.error || err.message));
     }
   };
 
@@ -129,10 +159,32 @@ export default function ShiftModels() {
   };
 
   const removeShift = (index: number) => {
+    setEditForm({ ...editForm, shifts: editForm.shifts.filter((_, i) => i !== index) });
+  };
+
+  const addRule = () => {
+    const def = RULE_TYPES[0];
     setEditForm({
       ...editForm,
-      shifts: editForm.shifts.filter((_, i) => i !== index),
+      rules: [...editForm.rules, { type: def.value, value: 5, label: `${def.label}: 5` }],
     });
+  };
+
+  const updateRule = (index: number, field: keyof Rule, val: any) => {
+    const rules = [...editForm.rules];
+    rules[index] = { ...rules[index], [field]: val };
+    // Auto-generate label
+    const typeDef = RULE_TYPES.find(t => t.value === rules[index].type);
+    if (typeDef && rules[index].type !== 'NO_SHIFT_AFTER') {
+      rules[index].label = `${typeDef.label}: ${rules[index].value} ${typeDef.unit}`;
+    } else if (rules[index].type === 'NO_SHIFT_AFTER') {
+      rules[index].label = `Keine ${rules[index].shiftB || '?'} nach ${rules[index].shiftA || '?'}`;
+    }
+    setEditForm({ ...editForm, rules });
+  };
+
+  const removeRule = (index: number) => {
+    setEditForm({ ...editForm, rules: editForm.rules.filter((_, i) => i !== index) });
   };
 
   if (loading) return <div className="text-center py-10">Laden...</div>;
@@ -154,7 +206,7 @@ export default function ShiftModels() {
           onChange={(e) => setAiDescription(e.target.value)}
           rows={4}
           className="w-full px-3 py-2 border rounded-md mb-4"
-          placeholder="z.B. Wir haben eine Krankenstation mit 3 Schichten: Früh (6-14 Uhr), Spät (14-22 Uhr) und Nacht (22-6 Uhr). Die Frühschicht braucht tagsüber 3 Mitarbeiter (min. 1 Fachkraft), am Wochenende 2. Spät- und Nachtschicht je 2 Mitarbeiter..."
+          placeholder="z.B. Wir haben eine Krankenstation mit 3 Schichten: Früh (6-14 Uhr), Spät (14-22 Uhr) und Nacht (22-6 Uhr). Die Frühschicht braucht tagsüber 3 Mitarbeiter (min. 1 Fachkraft), am Wochenende 2..."
         />
         <button
           onClick={handleAiGenerate}
@@ -162,15 +214,9 @@ export default function ShiftModels() {
           className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50"
         >
           {aiLoading ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Generiere...
-            </>
+            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generiere...</>
           ) : (
-            <>
-              <Sparkles className="w-4 h-4 mr-2" />
-              Modell erstellen
-            </>
+            <><Sparkles className="w-4 h-4 mr-2" />Modell erstellen</>
           )}
         </button>
       </div>
@@ -180,7 +226,7 @@ export default function ShiftModels() {
           <h2 className="text-lg font-semibold mb-4">
             {selectedModel ? 'Modell bearbeiten' : 'Neues Modell'}
           </h2>
-          
+
           <div className="grid grid-cols-2 gap-4 mb-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
@@ -202,6 +248,8 @@ export default function ShiftModels() {
             </div>
           </div>
 
+          {/* Schichten */}
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">Schichten</h3>
           <div className="overflow-x-auto mb-4">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -220,73 +268,32 @@ export default function ShiftModels() {
                 {editForm.shifts.map((shift, index) => (
                   <tr key={index}>
                     <td className="px-3 py-2">
-                      <input
-                        type="text"
-                        value={shift.name || ''}
-                        onChange={(e) => updateShift(index, 'name', e.target.value)}
-                        className="w-full px-2 py-1 border rounded text-sm"
-                      />
+                      <input type="text" value={shift.name || ''} onChange={(e) => updateShift(index, 'name', e.target.value)} className="w-full px-2 py-1 border rounded text-sm" />
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        type="time"
-                        value={shift.startTime || '06:00'}
-                        onChange={(e) => updateShift(index, 'startTime', e.target.value)}
-                        className="px-2 py-1 border rounded text-sm"
-                      />
+                      <input type="time" value={shift.startTime || '06:00'} onChange={(e) => updateShift(index, 'startTime', e.target.value)} className="px-2 py-1 border rounded text-sm" />
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        type="time"
-                        value={shift.endTime || '14:00'}
-                        onChange={(e) => updateShift(index, 'endTime', e.target.value)}
-                        className="px-2 py-1 border rounded text-sm"
-                      />
+                      <input type="time" value={shift.endTime || '14:00'} onChange={(e) => updateShift(index, 'endTime', e.target.value)} className="px-2 py-1 border rounded text-sm" />
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        type="number"
-                        value={shift.minStaff || 2}
-                        onChange={(e) => updateShift(index, 'minStaff', parseInt(e.target.value))}
-                        className="w-16 px-2 py-1 border rounded text-sm"
-                        min="1"
-                      />
+                      <input type="number" value={shift.minStaff || 2} onChange={(e) => updateShift(index, 'minStaff', parseInt(e.target.value))} className="w-16 px-2 py-1 border rounded text-sm" min="1" />
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        type="number"
-                        value={shift.minQualified || 1}
-                        onChange={(e) => updateShift(index, 'minQualified', parseInt(e.target.value))}
-                        className="w-16 px-2 py-1 border rounded text-sm"
-                        min="0"
-                      />
+                      <input type="number" value={shift.minQualified || 1} onChange={(e) => updateShift(index, 'minQualified', parseInt(e.target.value))} className="w-16 px-2 py-1 border rounded text-sm" min="0" />
                     </td>
                     <td className="px-3 py-2">
-                      <select
-                        value={shift.days || 'Mo-Fr'}
-                        onChange={(e) => updateShift(index, 'days', e.target.value)}
-                        className="px-2 py-1 border rounded text-sm"
-                      >
+                      <select value={shift.days || 'Mo-Fr'} onChange={(e) => updateShift(index, 'days', e.target.value)} className="px-2 py-1 border rounded text-sm">
                         <option value="Mo-So">Mo-So</option>
                         <option value="Mo-Fr">Mo-Fr</option>
                         <option value="Sa-So">Sa-So</option>
                       </select>
                     </td>
                     <td className="px-3 py-2">
-                      <input
-                        type="color"
-                        value={shift.color || '#3B82F6'}
-                        onChange={(e) => updateShift(index, 'color', e.target.value)}
-                        className="w-8 h-8 rounded cursor-pointer"
-                      />
+                      <input type="color" value={shift.color || '#3B82F6'} onChange={(e) => updateShift(index, 'color', e.target.value)} className="w-8 h-8 rounded cursor-pointer" />
                     </td>
                     <td className="px-3 py-2">
-                      <button
-                        onClick={() => removeShift(index)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <button onClick={() => removeShift(index)} className="text-red-600 hover:text-red-800"><Trash2 className="w-4 h-4" /></button>
                     </td>
                   </tr>
                 ))}
@@ -294,20 +301,67 @@ export default function ShiftModels() {
             </table>
           </div>
 
+          <button onClick={addShift} className="inline-flex items-center px-3 py-1 border rounded-md hover:bg-gray-50 mb-6">
+            <Plus className="w-4 h-4 mr-1" />Schicht hinzufügen
+          </button>
+
+          {/* Planungsregeln */}
+          <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2 mt-2">Planungsregeln</h3>
+          <p className="text-xs text-gray-500 mb-3">Diese Regeln werden der KI beim Generieren des Dienstplans mitgegeben.</p>
+
+          <div className="space-y-2 mb-3">
+            {editForm.rules.map((rule, i) => (
+              <div key={i} className="flex items-center gap-2 p-2 bg-gray-50 rounded border">
+                <select
+                  value={rule.type}
+                  onChange={(e) => updateRule(i, 'type', e.target.value)}
+                  className="px-2 py-1 border rounded text-sm"
+                >
+                  {RULE_TYPES.map(t => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+                {rule.type === 'NO_SHIFT_AFTER' ? (
+                  <>
+                    <input
+                      type="text"
+                      placeholder="Schicht A (nach der)"
+                      value={rule.shiftA || ''}
+                      onChange={(e) => updateRule(i, 'shiftA', e.target.value)}
+                      className="w-28 px-2 py-1 border rounded text-sm"
+                    />
+                    <span className="text-xs text-gray-500">→ nicht</span>
+                    <input
+                      type="text"
+                      placeholder="Schicht B (danach)"
+                      value={rule.shiftB || ''}
+                      onChange={(e) => updateRule(i, 'shiftB', e.target.value)}
+                      className="w-28 px-2 py-1 border rounded text-sm"
+                    />
+                  </>
+                ) : (
+                  <input
+                    type="number"
+                    value={rule.value as number}
+                    min={1}
+                    onChange={(e) => updateRule(i, 'value', parseInt(e.target.value))}
+                    className="w-16 px-2 py-1 border rounded text-sm"
+                  />
+                )}
+                <span className="text-xs text-gray-400 flex-1 truncate">{rule.label}</span>
+                <button onClick={() => removeRule(i)} className="text-red-500 hover:text-red-700">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+
           <div className="flex justify-between">
-            <button
-              onClick={addShift}
-              className="inline-flex items-center px-3 py-1 border rounded-md hover:bg-gray-50"
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              Schicht hinzufügen
+            <button onClick={addRule} className="inline-flex items-center px-3 py-1 border rounded-md hover:bg-gray-50 text-sm">
+              <Plus className="w-4 h-4 mr-1" />Regel hinzufügen
             </button>
-            <button
-              onClick={handleSaveModel}
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              <Save className="w-4 h-4 mr-2" />
-              Speichern
+            <button onClick={handleSaveModel} className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+              <Save className="w-4 h-4 mr-2" />Speichern
             </button>
           </div>
         </div>
@@ -321,54 +375,59 @@ export default function ShiftModels() {
           {models.length === 0 ? (
             <p className="p-6 text-gray-500 text-center">Keine Dienstmodelle vorhanden</p>
           ) : (
-            models.map((model) => (
-              <div key={model.id} className="p-6 hover:bg-gray-50">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <h3 className="font-semibold">{model.name}</h3>
-                    <p className="text-sm text-gray-500">{model.description}</p>
+            models.map((model) => {
+              const cfg = parseConfig(model.config);
+              return (
+                <div key={model.id} className="p-6 hover:bg-gray-50">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h3 className="font-semibold">{model.name}</h3>
+                      <p className="text-sm text-gray-500">{model.description}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedModel(model);
+                          setEditForm({
+                            name: model.name,
+                            description: model.description || '',
+                            shifts: model.shifts,
+                            rules: cfg.rules,
+                          });
+                        }}
+                        className="text-blue-600 hover:text-blue-800 text-sm"
+                      >
+                        Bearbeiten
+                      </button>
+                      <button onClick={() => handleDeleteModel(model.id)} className="text-red-600 hover:text-red-800 text-sm">
+                        Löschen
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        setSelectedModel(model);
-                        setEditForm({
-                          name: model.name,
-                          description: model.description || '',
-                          shifts: model.shifts,
-                        });
-                      }}
-                      className="text-blue-600 hover:text-blue-800 text-sm"
-                    >
-                      Bearbeiten
-                    </button>
-                    <button
-                      onClick={() => handleDeleteModel(model.id)}
-                      className="text-red-600 hover:text-red-800 text-sm"
-                    >
-                      Löschen
-                    </button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
-                  {model.shifts.map((shift) => (
-                    <div
-                      key={shift.id}
-                      className="px-3 py-2 rounded text-white text-sm"
-                      style={{ backgroundColor: shift.color }}
-                    >
-                      <div className="font-medium">{shift.name}</div>
-                      <div className="text-xs opacity-90">
-                        {shift.startTime}-{shift.endTime}
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-2">
+                    {model.shifts.map((shift) => (
+                      <div key={shift.id} className="px-3 py-2 rounded text-white text-sm" style={{ backgroundColor: shift.color }}>
+                        <div className="font-medium">{shift.name}</div>
+                        <div className="text-xs opacity-90">{shift.startTime}-{shift.endTime}</div>
+                        <div className="text-xs opacity-75">{shift.minStaff} Pers. ({shift.minQualified} FK) · {shift.days}</div>
                       </div>
-                      <div className="text-xs opacity-75">
-                        {shift.minStaff} Pers. ({shift.minQualified} FK) · {shift.days}
+                    ))}
+                  </div>
+                  {cfg.rules.length > 0 && (
+                    <div className="mt-2">
+                      <p className="text-xs text-gray-500 font-medium mb-1">Regeln:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {cfg.rules.map((r, i) => (
+                          <span key={i} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs border border-blue-200">
+                            {r.label}
+                          </span>
+                        ))}
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

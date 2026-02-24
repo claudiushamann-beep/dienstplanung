@@ -116,6 +116,7 @@ model ScheduleSoll {
   shiftType    String
   shiftModelId String?
   note         String?
+  isPinned     Boolean  @default(false)
   employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

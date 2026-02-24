@@ -79,6 +79,7 @@ export interface ScheduleEntry {
   shiftModelId?: string;
   note?: string;
   deviationReason?: string;
+  isPinned?: boolean;
   employee?: { id: string; firstName: string; lastName: string; position: string };
 }
 

@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { prisma } from '../index.js';
 import { auth, AuthRequest, requireRole } from '../middleware/auth.js';
 import { createAIProvider } from '../ai/index.js';
+import { getGermanHolidays } from '../utils/holidays.js';
 
 const router = Router();
 
@@ -116,7 +117,10 @@ router.post('/generate-schedule', auth, requireRole('ADMIN', 'PLANER'), async (r
       return res.status(400).json({ error: 'Kein KI-Provider konfiguriert' });
     }
 
-    const [shiftModel, employees] = await Promise.all([
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    const [shiftModel, employees, pinnedEntries] = await Promise.all([
       prisma.shiftModel.findUnique({
         where: { id: shiftModelId },
         include: { shifts: true }
@@ -124,6 +128,12 @@ router.post('/generate-schedule', auth, requireRole('ADMIN', 'PLANER'), async (r
       prisma.employee.findMany({
         where: { isActive: true },
         include: { constraints: true, absences: true }
+      }),
+      prisma.scheduleSoll.findMany({
+        where: {
+          isPinned: true,
+          date: { gte: start, lte: end }
+        }
       })
     ]);
 
@@ -133,6 +143,26 @@ router.post('/generate-schedule', auth, requireRole('ADMIN', 'PLANER'), async (r
 
     const allConstraints = employees.flatMap(e => e.constraints);
     const allAbsences = employees.flatMap(e => e.absences);
+
+    // Collect holidays for the date range
+    const holidayState = process.env.HOLIDAY_STATE || 'SH';
+    const years = new Set<number>();
+    for (let y = start.getFullYear(); y <= end.getFullYear(); y++) years.add(y);
+    const allHolidays: { date: string; name: string }[] = [];
+    for (const year of years) {
+      allHolidays.push(...getGermanHolidays(year, holidayState));
+    }
+    const holidays = allHolidays.filter(h => {
+      const d = new Date(h.date);
+      return d >= start && d <= end;
+    });
+
+    // Parse rules from shift model config
+    let rules: any[] = [];
+    try {
+      const cfg = JSON.parse(shiftModel.config || '{}');
+      rules = cfg.rules || [];
+    } catch { /* ignore */ }
 
     const provider = createAIProvider({
       name: providerConfig.name,
@@ -146,11 +176,23 @@ router.post('/generate-schedule', auth, requireRole('ADMIN', 'PLANER'), async (r
       constraints: allConstraints,
       absences: allAbsences,
       shiftModel,
-      startDate: new Date(startDate),
-      endDate: new Date(endDate)
+      startDate: start,
+      endDate: end,
+      pinnedEntries,
+      holidays,
+      rules
     });
 
-    res.json(result);
+    // Filter out AI entries that would overwrite pinned entries
+    const pinnedSet = new Set(
+      pinnedEntries.map(p => `${p.employeeId}_${p.date.toISOString().split('T')[0]}`)
+    );
+    const filteredEntries = (result.entries || []).filter(entry => {
+      const key = `${entry.employeeId}_${entry.date}`;
+      return !pinnedSet.has(key);
+    });
+
+    res.json({ entries: filteredEntries });
   } catch (error: any) {
     console.error('KI-Fehler:', error);
     res.status(500).json({ error: error.message || 'Fehler bei der Dienstplan-Generierung' });

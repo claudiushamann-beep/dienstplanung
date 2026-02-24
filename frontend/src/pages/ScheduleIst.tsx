@@ -1,34 +1,34 @@
 import { useEffect, useState } from 'react';
 import { employeesApi, schedulesApi } from '../services/api';
 import { Employee, ScheduleEntry } from '../types';
-import { format, startOfWeek, addDays, isWeekend } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isWeekend, addMonths, subMonths, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { isHoliday, getHolidayName } from '../utils/holidays';
 
 export default function ScheduleIst() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [startDate, setStartDate] = useState(() => {
-    const d = startOfWeek(new Date(), { weekStartsOn: 1 });
-    return format(d, 'yyyy-MM-dd');
-  });
+  const [currentMonth, setCurrentMonth] = useState(() => format(new Date(), 'yyyy-MM'));
   const [editingEntry, setEditingEntry] = useState<string | null>(null);
   const [deviationReason, setDeviationReason] = useState('');
 
-  const days = Array.from({ length: 14 }, (_, i) => addDays(new Date(startDate), i));
+  const monthStart = startOfMonth(parseISO(currentMonth + '-01'));
+  const monthEnd = endOfMonth(monthStart);
+  const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
   useEffect(() => {
     fetchData();
-  }, [startDate]);
+  }, [currentMonth]);
 
   const fetchData = async () => {
     try {
       const [empRes, schedRes] = await Promise.all([
         employeesApi.getAll(),
         schedulesApi.getIst({
-          startDate: days[0].toISOString(),
-          endDate: days[13].toISOString(),
+          startDate: monthStart.toISOString(),
+          endDate: monthEnd.toISOString(),
         }),
       ]);
       setEmployees(empRes.data);
@@ -54,6 +54,8 @@ export default function ScheduleIst() {
     return 'bg-gray-500';
   };
 
+  const isDayOff = (day: Date) => isWeekend(day) || isHoliday(day);
+
   const handleUpdateDeviation = async (entryId: string, reason: string) => {
     try {
       await schedulesApi.createIst([{
@@ -75,7 +77,7 @@ export default function ScheduleIst() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Ist-Dienstplan</h1>
           {totalDeviations > 0 && (
@@ -85,12 +87,25 @@ export default function ScheduleIst() {
             </p>
           )}
         </div>
-        <input
-          type="date"
-          value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
-          className="px-3 py-2 border rounded-md"
-        />
+
+        {/* Month navigation */}
+        <div className="flex items-center gap-2 border rounded-md px-2 py-1 bg-white">
+          <button
+            onClick={() => setCurrentMonth(format(subMonths(parseISO(currentMonth + '-01'), 1), 'yyyy-MM'))}
+            className="p-1 hover:bg-gray-100 rounded"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="font-medium min-w-[130px] text-center">
+            {format(parseISO(currentMonth + '-01'), 'MMMM yyyy', { locale: de })}
+          </span>
+          <button
+            onClick={() => setCurrentMonth(format(addMonths(parseISO(currentMonth + '-01'), 1), 'yyyy-MM'))}
+            className="p-1 hover:bg-gray-100 rounded"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-x-auto">
@@ -103,12 +118,13 @@ export default function ScheduleIst() {
               {days.map((day) => (
                 <th
                   key={day.toISOString()}
-                  className={`px-2 py-3 text-center text-xs font-medium uppercase ${
-                    isWeekend(day) ? 'bg-gray-100' : ''
+                  className={`px-2 py-3 text-center text-xs font-medium uppercase min-w-[38px] ${
+                    isDayOff(day) ? 'bg-gray-100' : ''
                   }`}
+                  title={getHolidayName(day) || undefined}
                 >
                   <div>{format(day, 'EEE', { locale: de })}</div>
-                  <div className="font-normal">{format(day, 'dd.MM')}</div>
+                  <div className="font-normal">{format(day, 'dd')}</div>
                 </th>
               ))}
             </tr>
@@ -125,21 +141,22 @@ export default function ScheduleIst() {
                   return (
                     <td
                       key={day.toISOString()}
-                      className={`px-1 py-2 text-center text-xs ${isWeekend(day) ? 'bg-gray-50' : ''}`}
+                      className={`px-1 py-2 text-center text-xs ${isDayOff(day) ? 'bg-gray-50' : ''}`}
                     >
                       <div className="flex flex-col gap-1">
                         {shifts.map((s) => (
                           <div
                             key={s.id}
-                            className={`relative px-2 py-0.5 rounded text-white cursor-pointer ${getShiftColor(s.shiftType)} ${
+                            className={`relative px-1 py-0.5 rounded text-white cursor-pointer ${getShiftColor(s.shiftType)} ${
                               s.deviationReason ? 'ring-2 ring-red-400' : ''
                             }`}
                             onClick={() => {
                               setEditingEntry(s.id);
                               setDeviationReason(s.deviationReason || '');
                             }}
+                            title={s.deviationReason || undefined}
                           >
-                            {s.shiftType}
+                            {s.shiftType.charAt(0)}
                             {s.deviationReason && (
                               <AlertTriangle className="absolute -top-1 -right-1 w-3 h-3 text-red-500 bg-white rounded-full" />
                             )}
@@ -189,7 +206,7 @@ export default function ScheduleIst() {
 
       <div className="bg-white rounded-lg shadow p-4">
         <h3 className="font-medium mb-2">Legende</h3>
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-4">
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded bg-green-500"></div>
             <span className="text-sm">Frühdienst</span>
@@ -201,6 +218,10 @@ export default function ScheduleIst() {
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded bg-indigo-500"></div>
             <span className="text-sm">Nachtdienst</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded bg-gray-200 border"></div>
+            <span className="text-sm">Wochenende / Feiertag</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded bg-green-500 ring-2 ring-red-400"></div>
